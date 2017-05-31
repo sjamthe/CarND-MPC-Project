@@ -90,6 +90,7 @@ int main() {
           double px = j[1]["x"];
           double py = j[1]["y"];
           double psi = j[1]["psi"];
+          //psi = deg2rad(psi);
           double v = j[1]["speed"];
           double steering_angle = j[1]["steering_angle"];
           double throttle = j[1]["throttle"];
@@ -102,15 +103,18 @@ int main() {
           Eigen::VectorXd vs_x(count);
           Eigen::VectorXd vs_y(count);
           
+          //cout << "psi = " << psi << " speed = " << v << " vs_y = ";
           for(int i = 0; i < count; ++i) {
             const double dx = ptsx[i] - px;
             const double dy = ptsy[i] - py;
             
-            vs_x[i] = dx * cos(-psi) - dy * sin(-psi);
-            vs_y[i] = dy * cos(-psi) + dx * sin(-psi);
+            vs_x[i] = dx * cos(psi) + dy * sin(psi);
+            vs_y[i] = dy * cos(psi) - dx * sin(psi);
+            //cout << vs_y[i] << ", ";
           }
+         // cout << endl;
           //farthest waypoint
-          cout << "Farthest x point = " << vs_x[count-1] << endl;
+          //cout << "Farthest x point = " << vs_x[count-1] << endl;
           /*
            * Fit polynomial on vehical way points
            */
@@ -120,8 +124,8 @@ int main() {
           /*
            * create current state to pass to solver
            */
-          Eigen::VectorXd state(6); //x,y are zero as coordinates are relative to car's current state.
-          state << 0, 0, psi, v, steering_angle, throttle;
+          Eigen::VectorXd state(8); //x,y are zero as coordinates are relative to car's current state.
+          state << 0, 0, psi, v, steering_angle, throttle, vs_x[count -1], vs_y[count - 1];
           auto vars = mpc.Solve(state, coeffs);
           
           /*
@@ -141,8 +145,8 @@ int main() {
           msgJson["throttle"] = throttle_value;
 
           //Display the MPC predicted trajectory 
-          vector<double> mpc_x_vals ;
-          vector<double> mpc_y_vals ;
+          vector<double> mpc_x_vals = mpc.mpc_x_vals;
+          vector<double> mpc_y_vals = mpc.mpc_y_vals;
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line

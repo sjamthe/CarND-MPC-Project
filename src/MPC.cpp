@@ -5,10 +5,6 @@
 
 using CppAD::AD;
 
-// TODO: Set the timestep length and duration
-size_t N = 10; //Predict 10 steps in future
-double dt = 0.1; // predict at duration of 0.1 secs 
-
 // This value assumes the model presented in the classroom is used.
 //
 // It was obtained by measuring the radius formed by running the vehicle in the
@@ -25,7 +21,7 @@ const double Lf = 2.67;
 // The reference velocity is set to 100 mph.
 double ref_cte = 0;
 double ref_epsi = 0;
-double v_max = 40;
+double v_max = 100;
 double ref_psi = 0.1;
 double psi_max = 0;
 
@@ -40,6 +36,7 @@ size_t cte_start = v_start + N;
 size_t epsi_start = cte_start + N;
 size_t delta_start = epsi_start + N;
 size_t a_start = delta_start + N - 1;
+int debug = 0;
 
 class FG_eval {
  public:
@@ -50,28 +47,42 @@ class FG_eval {
   typedef CPPAD_TESTVECTOR(AD<double>) ADvector;
   void operator()(ADvector& fg, const ADvector& vars) {
     
-    cout << "Vars = " << vars << endl;
+    //cout << "Vars = " << vars << endl;
     // The cost is stored is the first element of `fg`.
     // Any additions to the cost should be added to `fg[0]`.
     fg[0] = 0;
     
     // The part of the cost based on the reference state.
     for (int i = 0; i < N; i++) {
-      fg[0] += CppAD::pow((vars[cte_start + i] - ref_cte), 2);
-      fg[0] += CppAD::pow((vars[epsi_start + i] - ref_epsi), 2);
-      fg[0] += CppAD::pow((vars[v_start + i] - v_max), 2);
-    }
+      CppAD::AD<double> cte_cost = 1000 * CppAD::pow((vars[cte_start + i] - ref_cte), 2);
+      CppAD::AD<double> epsi_cost = 10000 * CppAD::pow((vars[epsi_start + i] - ref_epsi), 2);
+      CppAD::AD<double> v_cost = CppAD::pow((vars[v_start + i] - v_max), 2);
+      
+      if(i == 0 && debug)
+        cout << "Cost for i = " << i << ", " << cte_cost << ", " \
+                << epsi_cost <<", " << v_cost <<", ";
+      fg[0] += cte_cost + epsi_cost + v_cost;
+    
     
     // Minimize the use of actuators.
-    for (int i = 0; i < N - 1; i++) {
-      fg[0] += CppAD::pow(vars[delta_start + i], 2);
-      fg[0] += CppAD::pow(vars[a_start + i], 2);
-    }
-    
-    // Minimize the value gap between sequential actuations.
-    for (int i = 0; i < N - 2; i++) {
-      fg[0] += CppAD::pow(vars[delta_start + i + 1] - vars[delta_start + i], 2);
-      fg[0] += CppAD::pow(vars[a_start + i + 1] - vars[a_start + i], 2);
+      if( i < N-1) {
+        CppAD::AD<double> delta_cost = 100*CppAD::pow(vars[delta_start + i], 2);
+        CppAD::AD<double> a_cost = 10*CppAD::pow(vars[a_start + i], 2);
+        fg[0] += delta_cost + a_cost;
+        if(i == 0 && debug)
+          cout << delta_cost << ", " << a_cost << ", ";
+      }
+      if(i < N-2) {
+        // Minimize the value gap between sequential actuations.
+
+        CppAD::AD<double> diff_delta_cost = CppAD::pow(vars[delta_start + i + 1] - vars[delta_start + i], 2);
+        CppAD::AD<double> diff_a_cost = 10*CppAD::pow(vars[a_start + i + 1] - vars[a_start + i], 2);
+        fg[0] += diff_delta_cost + diff_a_cost;
+        if(i == 0 && debug)
+          cout << diff_delta_cost << ", " << diff_a_cost;
+      }
+      if(i == 0 && debug)
+        cout << endl;
     }
     //cout << "fg[0] = " << fg[0] << endl;
     //
@@ -112,9 +123,10 @@ class FG_eval {
       // Only consider the actuation at time t.
       AD<double> delta0 = vars[delta_start + i];
       AD<double> a0 = vars[a_start + i];
-      
+      //value of y based on polynomial
       AD<double> f0 = coeffs[0] + coeffs[1] * x0 + \
                     coeffs[2] * x0 * x0 + coeffs[3] * x0 * x0 * x0;
+      //value of psi based on detivative of poly.
       AD<double> psides0 = CppAD::atan(3.0 * coeffs[3] * x0 * x0 + \
                                         2.0 * coeffs[2] * x0 + coeffs[1]);
       
@@ -151,17 +163,29 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   bool ok = true;
   size_t i;
   typedef CPPAD_TESTVECTOR(double) Dvector;
-  
+  // As actuator has 100ms latency we set the initial variables to where they will be in 100ms.
+  const double latency = 0.1;// in seconds
   double x = state[0];
   double y = state[1];
   double psi = state[2];
   double v = state[3];
   double steering_angle = state[4];
   double throttle = state[5];
+  double x_max = state[6];
+  double y_minmax = state[7];
+  
+  //The maximum distance we are safe to get to is 1/2 of x_max as we have no waypoints
+  // after x_max and we want to keep some buffer (50% for now)
+  // so the max speed we can get to is the speed we can reach in N*dt seconds?
+  //we don't know the unit of x is it feet?
+  //v_max = x_max/(N*latency);
+  //cout << "v_max = " << v_max << endl;
+  
   double cte = coeffs[0]; // current CTE is fitted polynomial (road curve) evaluated at px = 0.0
   // epsi = arctan(f') where f' is the derivative of the fitted polynomial
   // f' = 3.0 * K[3] * px0 * px0 + 2.0 * K[2] * px0 + K[1]
   double epsi = -atan(coeffs[1]);
+  //cout << "cte, epsi = " << cte << ", " << epsi << endl;
   // TODO: Set the number of model variables (includes both states and inputs).
   // For example: If the state is a 4 element vector, the actuators is a 2
   // element vector and there are 10 timesteps. The number of variables is:
@@ -179,18 +203,37 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   for (int i = 0; i < n_vars; i++) {
     vars[i] = 0;
   }
-
+  for (int i = y_start; i < n_vars; i++) {
+    vars[i] = 0;
+  }
   // Set the initial variable values -
   Dvector vars_lowerbound(n_vars);
   Dvector vars_upperbound(n_vars);
   // TODO: Set lower and upper limits for variables.
+  //upper & lower bound for x is from 0 to max waypoint
+  for (int i = x_start; i < x_start + N; i++) {
+    vars_lowerbound[i] = 0;
+    vars_upperbound[i] = x_max;
+  }
+  
   // Set all non-actuators upper and lowerlimits
   // to the max negative and positive values.
-  for (int i = 0; i < delta_start; i++) {
+  //cout << "y_minmax = " << y_minmax << endl;
+  for (int i = y_start; i < y_start + N; i++) {
+    if(y_minmax < 0) {
+      vars_lowerbound[i] = -1.0e19; //y_minmax;
+      vars_upperbound[i] = 1.0e19; //-y_minmax;
+      //cout << "lt " << vars_lowerbound[i] << ", " << vars_upperbound[i] << endl;
+    } else {
+      vars_lowerbound[i] = -1.0e19; //-y_minmax;
+      vars_upperbound[i] = 1.0e19; //y_minmax;
+      //cout << vars_lowerbound[i] << ", " << vars_upperbound[i] << endl;
+    }
+  }
+  for (int i = psi_start; i < delta_start; i++) {
     vars_lowerbound[i] = -1.0e19;
     vars_upperbound[i] = 1.0e19;
   }
-  
   // The upper and lower limits of delta are set to -25 and 25
   // degrees (values in radians).
   // NOTE: Feel free to change this to something else.
@@ -198,26 +241,13 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     vars_lowerbound[i] = -0.436332;
     vars_upperbound[i] = 0.436332;
   }
-  //we should limit max speed if psi is too high
-  /*if(fabs(psi) > 5) {
-    v_max = 30;
-  } else {
-    v_max = 40;
-  }
-  if(fabs(psi) > psi_max) {
-    psi_max = fabs(psi);
-    cout << "Max psi = " << psi_max << endl;
-  }*/
-  
+
   // Acceleration/decceleration upper and lower limits.
   // NOTE: Feel free to change this to something else.
   for (int i = a_start; i < n_vars; i++) {
-    vars_lowerbound[i] = -0.2; //If we don't want to break hard then we can reduce this.
-    if(v > 0.9*v_max) {
-      vars_upperbound[i] = 0.0;
-    } else {
-      vars_upperbound[i] = 0.5;
-    }
+    vars_lowerbound[i] = -0.5; //If we don't want to break hard then we can reduce this.
+    //upper limit of throttle adjusted based inversely with speed.
+    vars_upperbound[i] = 1-v/v_max;
   }
   
   // Lower and upper limits for the constraints
@@ -229,9 +259,9 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     constraints_upperbound[i] = 0;
   }
   //We should take delay into account here.
-  // As actuator has 100ms latency we set the initial variables to where they will be in 100ms.
-  const double latency = 0.1;
+ 
   vars[x_start] = 0 + v*latency; //0 in vehicle coordinates
+  //vars[y_start -1] = x_max;
   vars[y_start] = 0; //0 in vehicle coordinates
   vars[psi_start] = 0 + v * (-steering_angle) / Lf * latency; //psi is 0 in vehicle coordinates
   vars[v_start] = v + throttle*latency;
@@ -305,16 +335,16 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   //
   // {...} is shorthand for creating a vector, so auto x1 = {1.0,2.0}
   // creates a 2 element double vector.
-  vector<double> mpc_x_vals(N);
-  vector<double> mpc_y_vals(N);
-
-  
+  //cout << "mpc_y_vals = ";
+  mpc_x_vals.resize(N);
+  mpc_y_vals.resize(N);
   for (int i = 0; i < N; ++i) {
     mpc_x_vals[i] = solution.x[x_start + i];
     mpc_y_vals[i] = solution.x[y_start + i];
+    //cout << mpc_y_vals[i] << ", " ;
   }
-  //cout << "solution: " << solution.x.size() << endl;
+  //cout << endl;
   
-//  cout << "solution: " << solution.x[delta_start] << "," << solution.x[a_start] << endl;
+  //cout << "solution: " << solution.x[delta_start] << "," << solution.x[a_start] << endl;
   return {solution.x[delta_start], solution.x[a_start]};
 }

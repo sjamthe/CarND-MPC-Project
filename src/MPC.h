@@ -6,8 +6,14 @@
 
 using namespace std;
 
+const size_t N = 15; //Predict 10 steps in future
+const double dt = 0.08; // predict at duration of 0.1 secs
+
 class MPC {
- public:
+
+  public:
+    vector<double> mpc_x_vals;
+    vector<double> mpc_y_vals;
   MPC();
 
   virtual ~MPC();
