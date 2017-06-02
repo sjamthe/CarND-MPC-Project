@@ -2,6 +2,57 @@
 Self-Driving Car Engineer Nanodegree Program
 
 ---
+## Project Introduction
+
+The simulator provides us with vehicle's state (current speed, throttle and steering angle) and its location in X-Y co-ordinates and its orientation (psi in radians) with respective to X-axis.
+We also get 10 wave points in same co-ordinates system for the vehicle to follow. We are also told that the Vehicle has 100 millisecond latency from command to actuation.
+
+Click on the following video to see the implementation of MPC in action.
+
+ [![Self driving car Video](images/MPC.png)](https://www.youtube.com/watch?v=BRoa006E-7k)
+
+## Implementation
+
+### Convert way-points to Vehicle coordinate space
+The following diagram shows how to convert to vehicle co-ordinates system.
+In this system the current position of the car is treated as (0,0) with X axis along the direction of car's motion so psi-vehicle is zero too.
+[![Vehicle coordinate system ](images/vehicle-coordinates.png)]
+
+### Fitting 3rd degree polynomial for the waypoints
+Third degree polynomial resembles road better so we use the converted way-points to fit a third degree polynomial.
+
+### Solver constraints
+We use the CPPAD/ioopt solver. We bound the following variables.
+1. x variable is bounded between 0 and x_max where x_max is the x coordinate of the 10th way-point. We reason that there is no point in predicting points beyond what we know of the road.
+2. We tried to restrict y between -y_max & +y_max similarly but found it not to be necessary as other constraints worked better.
+3. We restricted the steering angle between += 25 degrees (or -+ 0.436332 radians as suggested) to avoid sharp turns. Results show that our car never takes turns beyond +- 0.19
+4. We limited the braking to -0.5 to avoid sharp breaks. For acceleration we came with an elegant way to slow down. Normally when we drive the car we don't go full throttle at all speeds so we decide to limit throttle inverse of speed (1-v/v_max) where v_max was set to 100 mph. We see the car going above 70mph and keeping good speed and stability while slowing down at turns.
+
+With some trial & error we settled with N = 15 and dt = .08 for best prediction of car's trajectory.
+We also used the following multipliers in cost function to make sure all variables have effect on the cost equally.
+1. 1000 for CTE (cross track error).
+2. 10000 for EPSI (error in vehicle orientation).
+3. 1 for velocity as velocity already has a very high order of magnitude compared to other variables.
+4. 100 for steering angle (delta) to reduce use of steering unnecessarily.
+5. 10 for acceleration so we can go steady as much as we can.
+6. 1 for change in steering angle (delta) between consecutive values (to reduce sudden jerks).
+7. 10 for change in acceleration between consecutive values (to reduce sudden jerks).
+
+### Constraints
+We setup Kinematic constraints as suggested
+The equations for the model:
+x_[t+1] = x[t] + v[t] * cos(psi[t]) * dt
+y_[t+1] = y[t] + v[t] * sin(psi[t]) * dt
+psi_[t+1] = psi[t] + v[t] / Lf * delta[t] * dt
+v_[t+1] = v[t] + a[t] * dt
+cte[t+1] = f(x[t]) - y[t] + v[t] * sin(epsi[t]) * dt
+epsi[t+1] = psi[t] - psides[t] + v[t] * delta[t] / Lf * dt
+
+### Summary
+I think overall I was very pleasantly surprised with how steady the car is compared with PID and other controls. This definitely depend on how good way-points we have though.
+I am wondering how can we get way-points for roads that have not been traveled before? Can we look at the camera images and calculate way-points?
+
+-------
 
 ## Dependencies
 
@@ -25,7 +76,7 @@ Self-Driving Car Engineer Nanodegree Program
   * Mac: `brew install ipopt`
   * Linux
     * You will need a version of Ipopt 3.12.1 or higher. The version available through `apt-get` is 3.11.x. If you can get that version to work great but if not there's a script `install_ipopt.sh` that will install Ipopt. You just need to download the source from the Ipopt [releases page](https://www.coin-or.org/download/source/Ipopt/) or the [Github releases](https://github.com/coin-or/Ipopt/releases) page.
-    * Then call `install_ipopt.sh` with the source directory as the first argument, ex: `bash install_ipopt.sh Ipopt-3.12.1`. 
+    * Then call `install_ipopt.sh` with the source directory as the first argument, ex: `bash install_ipopt.sh Ipopt-3.12.1`.
   * Windows: TODO. If you can use the Linux subsystem and follow the Linux instructions.
 * [CppAD](https://www.coin-or.org/CppAD/)
   * Mac: `brew install cppad`
