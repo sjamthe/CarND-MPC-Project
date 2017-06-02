@@ -9,14 +9,14 @@ We also get 10 wave points in same co-ordinates system for the vehicle to follow
 
 Click on the following video to see the implementation of MPC in action.
 
- [![Self driving car Video](images/MPC.png)](https://www.youtube.com/watch?v=BRoa006E-7k)
+ [![Self driving car Video](./MPC.png)](https://www.youtube.com/watch?v=BRoa006E-7k)
 
 ## Implementation
 
 ### Convert way-points to Vehicle coordinate space
 The following diagram shows how to convert to vehicle co-ordinates system.
 In this system the current position of the car is treated as (0,0) with X axis along the direction of car's motion so psi-vehicle is zero too.
-[![Vehicle coordinate system ](images/vehicle-coordinates.png)]
+[![Vehicle coordinate system ](./vehicle-coordinates.png)]
 
 ### Fitting 3rd degree polynomial for the waypoints
 Third degree polynomial resembles road better so we use the converted way-points to fit a third degree polynomial.
