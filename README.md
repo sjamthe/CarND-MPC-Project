@@ -39,8 +39,7 @@ We also used the following multipliers in cost function to make sure all variabl
 7. 10 for change in acceleration between consecutive values (to reduce sudden jerks).
 
 ### Constraints
-We setup Kinematic constraints as suggested
-The equations for the model:
+We setup constraints using these kinematic equations for the model:
 * x_[t+1] = x[t] + v[t] * cos(psi[t]) * dt
 * y_[t+1] = y[t] + v[t] * sin(psi[t]) * dt
 * psi_[t+1] = psi[t] + v[t] / Lf * delta[t] * dt
@@ -53,6 +52,7 @@ I think overall I was very pleasantly surprised with how steady the car is compa
 I am wondering how can we get way-points for roads that have not been traveled before? Can we look at the camera images and calculate way-points?
 
 -------
+# Project setup instructions
 
 ## Dependencies
 
