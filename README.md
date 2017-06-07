@@ -21,14 +21,14 @@ In this system the current position of the car is treated as (0,0) with X axis a
 ### Fitting 3rd degree polynomial for the waypoints
 Third degree polynomial resembles road better so we use the converted way-points to fit a third degree polynomial.
 
-### Solver constraints
+### MPC Model (Actuators, State)
 We use the CPPAD/ioopt solver. We bound the following variables.
 1. x variable is bounded between 0 and x_max where x_max is the x coordinate of the 10th way-point. We reason that there is no point in predicting points beyond what we know of the road.
 2. We tried to restrict y between -y_max & +y_max similarly but found it not to be necessary as other constraints worked better.
 3. We restricted the steering angle between += 25 degrees (or -+ 0.436332 radians as suggested) to avoid sharp turns. Results show that our car never takes turns beyond +- 0.19
 4. We limited the braking to -0.5 to avoid sharp breaks. For acceleration we came with an elegant way to slow down. Normally when we drive the car we don't go full throttle at all speeds so we decide to limit throttle inverse of speed (1-v/v_max) where v_max was set to 100 mph. We see the car going above 70mph and keeping good speed and stability while slowing down at turns.
 
-With some trial & error we settled with N = 15 and dt = .08 for best prediction of car's trajectory.
+With some trial & error we settled with N = 15 and dt = .08 for best prediction of car's trajectory. (I tried N = 10, dt = 0.1 as well)
 We also used the following multipliers in cost function to make sure all variables have effect on the cost equally.
 1. 1000 for CTE (cross track error).
 2. 10000 for EPSI (error in vehicle orientation).
@@ -38,7 +38,7 @@ We also used the following multipliers in cost function to make sure all variabl
 6. 1 for change in steering angle (delta) between consecutive values (to reduce sudden jerks).
 7. 10 for change in acceleration between consecutive values (to reduce sudden jerks).
 
-### Constraints
+### Constraints (Kinematic Equation)
 We setup constraints using these kinematic equations for the model:
 * x_[t+1] = x[t] + v[t] * cos(psi[t]) * dt
 * y_[t+1] = y[t] + v[t] * sin(psi[t]) * dt
